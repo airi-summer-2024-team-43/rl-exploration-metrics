@@ -12,6 +12,7 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
+from matplotlib import pyplot as plt
 
 from metric_rnd import RNDModel, args_for_rnd
 from metric_state_counting import StateCounter, args_for_state_counting
@@ -171,14 +172,16 @@ class Agent(nn.Module):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
+    if args.use_rnd_metric:
+        Args = args_for_rnd(Args)
+    if args.use_state_counting_metric:
+        Args = args_for_state_counting(Args)
+    args = tyro.cli(Args)
+
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     args.use_rnd_metric = args.use_rnd_metric or args.use_rnd_intrinsic_reward
-    if args.use_rnd_metric:
-        args = args_for_rnd(args)
-    if args.use_state_counting_metric:
-        args = args_for_state_counting(args)
 
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
@@ -228,6 +231,9 @@ if __name__ == "__main__":
             device
         )
         parameters += list(rnd_model.parameters())
+    if args.use_state_counting_metric:
+        state_counter = StateCounter()
+
     optimizer = optim.Adam(parameters, lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -241,11 +247,15 @@ if __name__ == "__main__":
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    int_rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    running_int_rewards = []
+    running_state_counts = []
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
     next_obs, _ = envs.reset(seed=args.seed)
+    state_counts = [set() for _ in range(args.num_envs)]
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
@@ -279,8 +289,26 @@ if __name__ == "__main__":
                 torch.Tensor(next_done).to(device),
             )
 
+            state_count_rewards = 0
+            if args.use_state_counting_metric:
+                state_count_rewards, state_counts = state_counter.update_visited_states(
+                    next_obs, state_counts
+                )
+                state_count_rewards = np.mean(state_count_rewards)
+
+            writer.add_scalar(
+                f"iteration_{iteration}/intrinsic_reward",
+                int_rewards[step].mean(),
+                global_step,
+            )
+            writer.add_scalar(
+                f"iteration_{iteration}/state_counts",
+                np.mean([len(x) for x in state_counts]),
+                global_step,
+            )
+
             if "final_info" in infos:
-                for info in infos["final_info"]:
+                for i, info in enumerate(infos["final_info"]):
                     if info and "episode" in info:
                         print(
                             f"global_step={global_step}, episodic_return={info['episode']['r']}"
@@ -291,7 +319,19 @@ if __name__ == "__main__":
                         writer.add_scalar(
                             "charts/episodic_length", info["episode"]["l"], global_step
                         )
+                        running_int_rewards.append(int_rewards[-args.num_steps:].cpu().numpy().mean())
+                        running_state_counts.append(np.mean([len(x) for x in state_counts]))
+                        plt.scatter(x=running_int_rewards, y=running_state_counts)
+                        writer.add_figure("exploration_metrics", plt.gcf(), global_step)
 
+        if args.use_rnd_metric:
+            intrinsic_rewards = rnd_model.get_intrinsic_reward(obs[-args.num_steps:])
+            int_rewards[-args.num_steps:] = intrinsic_rewards
+            if args.use_rnd_intrinsic_reward:
+                rewards[-args.num_steps:] = (
+                    rewards[-args.num_steps:] * args.ext_coef
+                    + intrinsic_rewards * args.int_coef
+                )
         # bootstrap value if not done
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(1, -1)
@@ -382,6 +422,10 @@ if __name__ == "__main__":
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
 
+                if args.use_rnd_metric:
+                    exploration_loss = rnd_model.get_forward_loss(b_obs[mb_inds])
+                    rnd_model.update(exploration_loss)
+
             if args.target_kl is not None and approx_kl > args.target_kl:
                 break
 
@@ -404,6 +448,8 @@ if __name__ == "__main__":
         writer.add_scalar(
             "charts/SPS", int(global_step / (time.time() - start_time)), global_step
         )
+        writer.add_scalar("charts/intrinsic_reward_mean", running_int_rewards[-1], iteration)
+        writer.add_scalar("charts/state_counts", running_state_counts[-1], iteration)
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
