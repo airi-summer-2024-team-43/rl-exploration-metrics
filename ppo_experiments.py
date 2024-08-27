@@ -3,7 +3,6 @@ import os
 import random
 import time
 from dataclasses import dataclass
-from typing import Literal
 
 import gymnasium as gym
 import numpy as np
@@ -13,6 +12,9 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
+
+from metric_rnd import RNDModel, args_for_rnd
+from metric_state_counting import StateCounter, args_for_state_counting
 
 
 @dataclass
@@ -41,10 +43,14 @@ class Args:
     """the user or org name of the model repository from the Hugging Face Hub"""
 
     # Experiment arguments
-    intrinsic_reward: Literal["entropy", "rnd"] | None = "entropy"
-    """the intrinsice reward to use"""
-    use_entropy: bool = False
+    use_entropy_loss: bool = False
     """whether to add entropy loss"""
+    use_rnd_intrinsic_reward: bool = False
+    """whether to add RND intrinsic reward"""
+    use_rnd_metric: bool = False
+    """whether to add RND metric. set True if use_rnd_intrinsic_reward is True"""
+    use_state_counting_metric: bool = False
+    """whether to add state counting metric"""
 
     # Algorithm specific arguments
     env_id: str = "PointMaze_Large_Diverse_G-v3"
@@ -168,6 +174,12 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
+    args.use_rnd_metric = args.use_rnd_metric or args.use_rnd_intrinsic_reward
+    if args.use_rnd_metric:
+        args = args_for_rnd(args)
+    if args.use_state_counting_metric:
+        args = args_for_state_counting(args)
+
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
@@ -210,7 +222,13 @@ if __name__ == "__main__":
     ), "only continuous action space is supported"
 
     agent = Agent(envs).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+    parameters = list(agent.parameters())
+    if args.use_rnd_metric:
+        rnd_model = RNDModel(input_size=envs.single_observation_space.shape[0]).to(
+            device
+        )
+        parameters += list(rnd_model.parameters())
+    optimizer = optim.Adam(parameters, lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
     obs = torch.zeros(
@@ -356,7 +374,7 @@ if __name__ == "__main__":
                 entropy_loss = entropy.mean()
                 loss = pg_loss + v_loss * args.vf_coef
 
-                if args.use_entropy:
+                if args.use_entropy_loss:
                     loss += -entropy_loss * args.ent_coef
 
                 optimizer.zero_grad()
