@@ -36,7 +36,7 @@ class Ensemble(nn.Module):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-5)
 
     def forward(self, obs, action):
-        x = torch.cat([obs, F.one_hot(action.long(), self.action_dim)], dim=-1)
+        x = torch.cat([obs, action], dim=-1)
         return torch.stack([self.networks[i](x) for i in range(self.n)])
     
     def get_ensemble_loss(self, obs, action, next_obs):
