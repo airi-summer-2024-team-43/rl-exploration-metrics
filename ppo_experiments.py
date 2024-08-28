@@ -290,7 +290,7 @@ if __name__ == "__main__":
                             "charts/episodic_length", info["episode"]["l"], global_step
                         )
 
-                        metric.end_episode_update()
+                        metric.end_episode_update(episodic_length=info["episode"]["l"])
 
         rewards = metric.update_intrinsic_reward(obs, rewards)
 

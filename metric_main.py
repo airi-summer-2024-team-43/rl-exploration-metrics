@@ -85,7 +85,7 @@ class MetricsUsage:
         #     global_step,
         # )
 
-    def end_episode_update(self):
+    def end_episode_update(self, episodic_length):
         self.running_int_rewards.append(
             self.int_rewards[-self.args.num_steps :].cpu().numpy().mean()
         )
