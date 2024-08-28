@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import numpy as np
 
 
 def args_for_state_counting(algo_args):
@@ -15,14 +16,15 @@ class StateCounter:
         self.x_size = x_size
         self.y_size = y_size
         self.scale = scale
-        self.num_states = int(x_size * y_size * scale**2)
+        self.shape = (y_size * scale, x_size * scale)
+        self.num_states = np.prod(self.shape)
 
     def get_cell(self, obs):
         x, y, *_ = obs
         shifted_x = int((x.item() + self.x_size / 2) * self.scale)
         shifted_y = int((y.item() + self.y_size / 2) * self.scale)
 
-        return shifted_x + shifted_y * self.x_size * self.scale
+        return shifted_x + shifted_y * self.shape[1]
 
     def update_visited_states(self, obs, visited_states):
         rewards = [0] * len(visited_states)
@@ -32,3 +34,14 @@ class StateCounter:
             visited_states[i].add(self.get_cell(obs[i]))
 
         return rewards, visited_states
+    
+    def get_visitation_maps(self, visited_states):
+        visitation = np.zeros(self.shape)  # В эту переменную инициализируем пустой массив размером с карту
+        for vis_set in visited_states:
+            self.to_2d_visitation_map(visitation, vis_set)
+        return visitation
+    
+    def to_2d_visitation_map(self, visitation, visitation_set):
+        for x in visitation_set:
+            i, j = divmod(x, self.shape[1])
+            visitation[i, j] += 1
