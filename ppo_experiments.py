@@ -53,6 +53,7 @@ class Args:
 
     # Algorithm specific arguments
     env_id: str = "PointMaze_Large_Diverse_G-v3"
+    env_map: str = None
     """the id of the environment"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
@@ -96,13 +97,13 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
 
-def make_env(env_id, idx, capture_video, run_name, gamma):
+def make_env(env_id, idx, capture_video, run_name, gamma, **kwargs):
     def thunk():
         if capture_video and idx == 0:
-            env = gym.make(env_id, render_mode="rgb_array")
+            env = gym.make(env_id, render_mode="rgb_array", **kwargs)
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
-            env = gym.make(env_id)
+            env = gym.make(env_id, **kwargs)
         env = gym.wrappers.FlattenObservation(
             env
         )  # deal with dm_control's Dict observation space
@@ -168,6 +169,20 @@ class Agent(nn.Module):
             self.critic(x),
         )
 
+def get_env_factory(args: Args):
+    from functools import partial
+    env_id = args.env_id
+
+    custom_map = args.env_map
+    if custom_map is None:
+        print('DEFAULT MAP')
+        return partial(make_env, env_id)
+
+    from maze_maps import maps
+    print('MAP:', custom_map, f'{np.array(maps[custom_map]).shape}')
+    custom_map = maps[custom_map]
+    return partial(make_env, env_id, maze_map=custom_map)
+
 
 if __name__ == "__main__":
     metric = MetricsUsage()
@@ -209,9 +224,10 @@ if __name__ == "__main__":
     )
 
     # env setup
+    env_factory = get_env_factory(args)
     envs = gym.vector.SyncVectorEnv(
         [
-            make_env(args.env_id, i, args.capture_video, run_name, args.gamma)
+            env_factory(i, args.capture_video, run_name, args.gamma)
             for i in range(args.num_envs)
         ]
     )
