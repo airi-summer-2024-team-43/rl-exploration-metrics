@@ -12,7 +12,6 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
-from matplotlib import pyplot as plt
 from metric_main import MetricsUsage
 
 
@@ -50,6 +49,8 @@ class Args:
     """whether to add RND metric. set True if use_rnd_intrinsic_reward is True"""
     use_state_counting_metric: bool = False
     """whether to add state counting metric"""
+    use_model_disagreement_metric: bool = False
+    """whether to add model disagreement metric"""
 
     # Algorithm specific arguments
     env_id: str = "PointMaze_Large_Diverse_G-v3"
@@ -169,17 +170,20 @@ class Agent(nn.Module):
             self.critic(x),
         )
 
+
 def get_env_factory(args: Args):
     from functools import partial
+
     env_id = args.env_id
 
     custom_map = args.env_map
     if custom_map is None:
-        print('DEFAULT MAP')
+        print("DEFAULT MAP")
         return partial(make_env, env_id)
 
     from maze_maps import maps
-    print('MAP:', custom_map, f'{np.array(maps[custom_map]).shape}')
+
+    print("MAP:", custom_map, f"{np.array(maps[custom_map]).shape}")
     custom_map = maps[custom_map]
     return partial(make_env, env_id, maze_map=custom_map)
 
@@ -306,7 +310,8 @@ if __name__ == "__main__":
                             "charts/episodic_length", info["episode"]["l"], global_step
                         )
 
-                        metric.end_episode_update(episodic_length=info["episode"]["l"])
+                        metric.end_episode_update()
+                        metric.log_metrics(global_step)
 
         rewards = metric.update_intrinsic_reward(obs, rewards)
 
@@ -424,7 +429,6 @@ if __name__ == "__main__":
         writer.add_scalar(
             "charts/SPS", int(global_step / (time.time() - start_time)), global_step
         )
-        metric.log_metrics(global_step)
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
