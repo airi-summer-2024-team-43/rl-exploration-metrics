@@ -83,3 +83,65 @@ class RNDModel(nn.Module):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
+
+class ConvRNDModel(nn.Module):
+    def __init__(self, output_size=64):
+        super().__init__()
+
+        self.output_size = output_size
+
+        self.predictor = nn.Sequential(
+            layer_init(nn.Conv2d(4, 32, 8, stride=4)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
+            nn.ReLU(),
+            nn.Flatten(),
+            layer_init(nn.Linear(64 * 7 * 7, output_size)),
+            nn.ReLU(),
+        )
+
+        self.target = nn.Sequential(
+            layer_init(nn.Conv2d(4, 32, 8, stride=4)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
+            nn.ReLU(),
+            nn.Flatten(),
+            layer_init(nn.Linear(64 * 7 * 7, output_size)),
+            nn.ReLU(),
+        )
+
+        for param in self.target.parameters():
+            param.requires_grad = False
+
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-5)
+
+    def forward(self, obs):
+        target_feature = self.target(obs)
+        predict_feature = self.predictor(obs)
+
+        return predict_feature, target_feature
+
+    @torch.no_grad()
+    def get_intrinsic_reward(self, obs):
+        predict_feature, target_feature = self.forward(obs / 255.0)
+        return 0.5 * (predict_feature - target_feature).pow(2).sum(-1)
+
+    def get_forward_loss(self, obs, mask_proportion=0.25):
+        predict_feature, target_feature = self.forward(obs / 255.0)
+        loss = F.mse_loss(predict_feature, target_feature.detach(), reduction="none")
+        mask = torch.rand_like(loss, device=loss.device)
+        mask = (mask < mask_proportion).type(torch.FloatTensor).to(loss.device)
+        loss = (loss * mask).sum() / torch.max(
+            mask.sum(), torch.tensor([1], device=loss.device, dtype=torch.float32)
+        )
+        return loss
+
+    def update(self, loss):
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
