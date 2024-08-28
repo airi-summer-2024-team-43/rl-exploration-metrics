@@ -36,7 +36,7 @@ class StateCounter:
         return rewards, visited_states
     
     def get_metric_value(self, visited_states):
-        return np.mean([len(x) for x in self.state_counts]) / self.state_counter.num_states
+        return np.mean([len(x) for x in visited_states]) / self.num_states
     
     def get_visitation_maps(self, visited_states):
         visitation = np.zeros(self.shape)  # В эту переменную инициализируем пустой массив размером с карту
