@@ -113,10 +113,7 @@ class MetricsUsage:
                 self.int_rewards[-self.args.num_steps :].cpu().numpy().mean()
             )
         if self.args.use_state_counting_metric:
-            metric = (
-                np.mean([len(x) for x in self.state_counts])
-                / self.state_counter.num_states
-            )
+            metric = self.state_counter.get_metric_value(self.state_counts)
             self.running_state_counts.append(metric)
         if self.args.use_model_disagreement_metric:
             metric = np.mean(self.episode_disagreements)
