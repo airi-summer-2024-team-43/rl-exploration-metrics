@@ -39,7 +39,7 @@ class MetricsUsage:
         if args.use_model_disagreement_metric:
             self.metrics.append("model_disagreement")
 
-    def init_metrics_info(self, args, obs_space, writer, device):
+    def init_metrics_info(self, args, obs_space, action_space, writer, device):
         self.writer = writer
         self.device = device
         self._update_args(args)
@@ -69,7 +69,7 @@ class MetricsUsage:
                 )
 
         if self.args.use_model_disagreement_metric:
-            self.ensemble = Ensemble(args)
+            self.ensemble = Ensemble(obs_space, action_space, args.ensemble_size)
 
     def update_intrinsic_reward(self, obs, rewards):
         args = self.args
@@ -132,4 +132,10 @@ class MetricsUsage:
         if self.args.use_model_disagreement_metric:
             self.writer.add_scalar(
                 "metric/model_disagreement", self.running_disagreements[-1], step
+            )
+        if self.args.plot_visitation_map:
+            import matplotlib.pyplot as plt
+            visitations = self.state_counter.get_visitation_maps(self.state_counts)
+            self.writer.add_figure(
+                'vis/visitations', plt.imshow(np.log(visitations + 1), origin='lower')
             )
