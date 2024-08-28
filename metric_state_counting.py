@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 def args_for_state_counting(algo_args):
     @dataclass
     class ArgsStateCounter(algo_args):
@@ -9,17 +10,19 @@ def args_for_state_counting(algo_args):
     return ArgsStateCounter
 
 
-class StateCounter():
-    def __init__(self):
-        pass
+class StateCounter:
+    def __init__(self, x_size=10, y_size=7, scale=10):
+        self.x_size = x_size
+        self.y_size = y_size
+        self.scale = scale
 
     def get_cell(self, obs):
         x, y, *_ = obs
-        shifted_x = int(x.item() + 5.0)
-        shifted_y = int(y.item() + 3.5)
+        shifted_x = int((x.item() + self.x_size / 2) * self.scale)
+        shifted_y = int((y.item() + self.y_size / 2) * self.scale)
 
-        return shifted_x + shifted_y * 10
-    
+        return shifted_x + shifted_y * self.x_size * self.scale
+
     def update_visited_states(self, obs, visited_states):
         rewards = [0] * len(visited_states)
         for i in range(len(visited_states)):
@@ -28,4 +31,3 @@ class StateCounter():
             visited_states[i].add(self.get_cell(obs[i]))
 
         return rewards, visited_states
-    
