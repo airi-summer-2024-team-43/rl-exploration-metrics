@@ -42,9 +42,16 @@ class MetricsUsage:
         self._init_metrics_running_info()
 
         if self.args.use_rnd_metric:
-            self.rnd_model = RNDModel(
-                input_size=obs_space, output_size=args.output_rnd
-            ).to(self.device)
+            if self.args.model_type == "mlp":
+                self.rnd_model = RNDModel(
+                    input_size=obs_space, output_size=args.output_rnd
+                ).to(self.device)
+            elif self.args.model_type == "conv":
+                self.rnd_model = RNDModel(
+                    input_size=obs_space, output_size=args.output_rnd
+                ).to(self.device)
+            else:
+                raise NotImplementedError("Unknown RND model type")
         if self.args.use_state_counting_metric:
             self.state_counter = StateCounter()
 

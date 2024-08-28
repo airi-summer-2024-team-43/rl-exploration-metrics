@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+from typing import Literal
+
 
 def args_for_rnd(algo_args):
     @dataclass
@@ -12,10 +14,12 @@ def args_for_rnd(algo_args):
         # RND
         ext_coef: float = 1.0
         """RND extrinsic reward coef"""
-        int_coef: float = 0.01
+        int_coef: float = 0.5
         """RND intrinsic reward coef"""
         output_rnd: int = 32
         """last layer RND output size"""
+        model_type: Literal["mlp", "conv"] = "mlp"
+        """RND model type"""
 
     return ArgsRND
 
@@ -67,7 +71,7 @@ class RNDModel(nn.Module):
     @torch.no_grad()
     def get_intrinsic_reward(self, obs):
         predict_feature, target_feature = self.forward(obs)
-        return 0.5 * (predict_feature - target_feature).pow(2).mean(-1)
+        return 0.5 * (predict_feature - target_feature).pow(2).sum(-1)
 
     def get_forward_loss(self, obs, mask_proportion=0.25):
         predict_feature, target_feature = self.forward(obs)
