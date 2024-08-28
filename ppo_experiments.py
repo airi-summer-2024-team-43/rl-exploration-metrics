@@ -30,7 +30,7 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
+    wandb_project_name: str = "cleanRL-exploration"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -43,7 +43,7 @@ class Args:
     hf_entity: str = ""
     """the user or org name of the model repository from the Hugging Face Hub"""
 
-    # Experiment arguments
+    # Experiment arguments # TODO
     use_entropy_loss: bool = False
     """whether to add entropy loss"""
     use_rnd_intrinsic_reward: bool = False
@@ -114,6 +114,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         env = gym.wrappers.NormalizeReward(env, gamma=gamma)
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
+
         return env
 
     return thunk
@@ -207,7 +208,9 @@ class MetricsUsage:
         self._init_metrics_running_info()
 
         if self.args.use_rnd_metric:
-            self.rnd_model = RNDModel(input_size=obs_space).to(self.device)
+            self.rnd_model = RNDModel(
+                input_size=obs_space, output_size=args.output_rnd
+            ).to(self.device)
         if self.args.use_state_counting_metric:
             self.state_counter = StateCounter()
 
@@ -247,6 +250,20 @@ class MetricsUsage:
         #     np.mean([len(x) for x in self.state_counts]),
         #     global_step,
         # )
+
+    def end_episode_update(self):
+        self.running_int_rewards.append(
+            self.int_rewards[-self.args.num_steps :].cpu().numpy().mean()
+        )
+        self.running_state_counts.append(np.mean([len(x) for x in self.state_counts]))
+
+    def log_metrics(self):
+        writer.add_scalar(
+            "metric/intrinsic_reward_mean", self.running_int_rewards[-1], iteration
+        )
+        writer.add_scalar(
+            "metric/state_counts", self.running_state_counts[-1], iteration
+        )
 
 
 if __name__ == "__main__":
@@ -369,17 +386,10 @@ if __name__ == "__main__":
                         writer.add_scalar(
                             "charts/episodic_length", info["episode"]["l"], global_step
                         )
-                        # TODO
-                        # running_int_rewards.append(
-                        #     int_rewards[-args.num_steps :].cpu().numpy().mean()
-                        # )
-                        # running_state_counts.append(
-                        #     np.mean([len(x) for x in state_counts])
-                        # )
-                        # plt.scatter(x=running_int_rewards, y=running_state_counts)
-                        # writer.add_figure("exploration_metrics", plt.gcf(), global_step)
 
-        metric.update_intrinsic_reward(obs, rewards)
+                        metric.end_episode_update()
+
+        rewards = metric.update_intrinsic_reward(obs, rewards)
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -495,11 +505,7 @@ if __name__ == "__main__":
         writer.add_scalar(
             "charts/SPS", int(global_step / (time.time() - start_time)), global_step
         )
-        # TODO
-        # writer.add_scalar(
-        #     "charts/intrinsic_reward_mean", running_int_rewards[-1], iteration
-        # )
-        # writer.add_scalar("charts/state_counts", running_state_counts[-1], iteration)
+        metric.log_metrics()
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
