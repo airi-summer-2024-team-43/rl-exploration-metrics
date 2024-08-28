@@ -75,33 +75,30 @@ class MetricsUsage:
             self.rnd_model.update(exploration_loss)
 
     def update_with_state(self, next_obs):
-        state_count_rewards = 0
         if self.args.use_state_counting_metric:
             state_count_rewards, self.state_counts = (
                 self.state_counter.update_visited_states(next_obs, self.state_counts)
             )
             state_count_rewards = np.mean(state_count_rewards)
-        # self.writer.add_scalar(
-        #     f"iteration_{iteration}/intrinsic_reward",
-        #     self.int_rewards[step].mean(),
-        #     global_step,
-        # )
-        # self.writer.add_scalar(
-        #     f"iteration_{iteration}/state_counts",
-        #     np.mean([len(x) for x in self.state_counts]),
-        #     global_step,
-        # )
 
     def end_episode_update(self, episodic_length):
-        self.running_int_rewards.append(
-            self.int_rewards[-self.args.num_steps :].cpu().numpy().mean()
-        )
-        self.running_state_counts.append(np.mean([len(x) for x in self.state_counts]))
+        if self.args.use_rnd_metric:
+            self.running_int_rewards.append(
+                self.int_rewards[-self.args.num_steps :].cpu().numpy().mean()
+            )
+        if self.args.use_state_counting_metric:
+            metric = (
+                np.mean([len(x) for x in self.state_counts])
+                / self.state_counter.num_states
+            )
+            self.running_state_counts.append(metric)
 
     def log_metrics(self, iteration):
-        self.writer.add_scalar(
-            "metric/intrinsic_reward_mean", self.running_int_rewards[-1], iteration
-        )
-        self.writer.add_scalar(
-            "metric/state_counts", self.running_state_counts[-1], iteration
-        )
+        if self.args.use_rnd_metric:
+            self.writer.add_scalar(
+                "metric/novelty_rnd", self.running_int_rewards[-1], iteration
+            )
+        if self.args.use_state_counting_metric:
+            self.writer.add_scalar(
+                "metric/state_counts", self.running_state_counts[-1], iteration
+            )
