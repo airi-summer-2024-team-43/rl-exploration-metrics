@@ -186,9 +186,9 @@ def get_env_factory(args: Args):
         print("DEFAULT MAP")
         return partial(make_env, env_id)
 
-    from maze_maps import maps
+    from maze_maps import maps, get_map_size
 
-    print("MAP:", custom_map, f"{np.array(maps[custom_map]).shape}")
+    print("MAP:", custom_map, f"{get_map_size(custom_map)}")
     custom_map = maps[custom_map]
     return partial(make_env, env_id, maze_map=custom_map)
 
@@ -213,7 +213,7 @@ if __name__ == "__main__":
             config=vars(args),
             name=run_name,
             monitor_gym=True,
-            save_code=True,
+            save_code=False,
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(

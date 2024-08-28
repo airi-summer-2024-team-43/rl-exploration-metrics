@@ -21,10 +21,10 @@ class StateCounter:
 
     def get_cell(self, obs):
         x, y, *_ = obs
-        shifted_x = int((x.item() + self.x_size / 2) * self.scale)
-        shifted_y = int((y.item() + self.y_size / 2) * self.scale)
+        i = int((y.item() + self.y_size / 2) * self.scale)
+        j = int((x.item() + self.x_size / 2) * self.scale)
 
-        return shifted_x + shifted_y * self.shape[1]
+        return i * self.shape[1] + j
 
     def update_visited_states(self, obs, visited_states):
         rewards = [0] * len(visited_states)

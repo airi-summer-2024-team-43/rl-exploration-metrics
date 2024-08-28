@@ -61,9 +61,8 @@ class MetricsUsage:
             if map_name is None:
                 self.state_counter = StateCounter()
             else:
-                from maze_maps import maps
-
-                map_size = np.array(maps[map_name]).shape
+                from maze_maps import get_map_size
+                map_size = get_map_size(map_name)
                 self.state_counter = StateCounter(
                     x_size=map_size[1], y_size=map_size[0]
                 )

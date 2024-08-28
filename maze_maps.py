@@ -1,3 +1,6 @@
+import numpy as np
+
+
 maps = {
     'small': [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -54,3 +57,8 @@ maps = {
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     ]
 }
+
+
+def get_map_size(name):
+    user_map = maps[name]
+    return np.array(np.array(user_map).shape) - 1
