@@ -15,6 +15,7 @@ class StateCounter:
         self.x_size = x_size
         self.y_size = y_size
         self.scale = scale
+        self.num_states = int(x_size * y_size * scale**2)
 
     def get_cell(self, obs):
         x, y, *_ = obs
