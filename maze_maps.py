@@ -61,4 +61,4 @@ maps = {
 
 def get_map_size(name):
     user_map = maps[name]
-    return np.array(np.array(user_map).shape) - 1
+    return np.array(np.array(user_map).shape) - 2
