@@ -52,10 +52,15 @@ class Args:
     use_model_disagreement_metric: bool = False
     """whether to add model disagreement metric"""
 
+    plot_visitation_map: bool = False
+    """whether to log visitation heatmap"""
+
+
     # Algorithm specific arguments
     env_id: str = "PointMaze_Large_Diverse_G-v3"
-    env_map: str = None
     """the id of the environment"""
+    env_map: str = None
+    """custom map name"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
@@ -243,7 +248,7 @@ if __name__ == "__main__":
     parameters = list(agent.parameters())
     optimizer = optim.Adam(parameters, lr=args.learning_rate, eps=1e-5)
     metric.init_metrics_info(
-        args, envs.single_observation_space.shape[0], writer, device
+        args, envs.single_observation_space.shape[0], envs.single_action_space.shape[0], writer, device
     )
 
     # ALGO Logic: Storage setup
@@ -296,6 +301,7 @@ if __name__ == "__main__":
             )
 
             metric.update_with_state(next_obs)
+            metric.update_disagreement(next_obs, action)
 
             if "final_info" in infos:
                 for i, info in enumerate(infos["final_info"]):

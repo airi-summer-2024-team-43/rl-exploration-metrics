@@ -8,6 +8,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 import torch.optim as optim
 import tyro
 from torch.distributions.categorical import Categorical
@@ -288,7 +289,8 @@ if __name__ == "__main__":
                 int_rewards[step] = rnd_model.get_intrinsic_reward(next_obs).view(-1)
             if args.use_model_disagreement_metric:
                 disagreements[step] = ensemble.get_disagreement(
-                    agent.get_hidden_state(next_obs), action
+                    agent.get_hidden_state(next_obs),
+                    F.one_hot(action.long(), envs.single_action_space.n),
                 )
             if "final_info" in infos:
                 for i, info in enumerate(infos["final_info"]):
@@ -442,7 +444,9 @@ if __name__ == "__main__":
                 if args.use_model_disagreement_metric:
                     disagreement_loss = ensemble.get_ensemble_loss(
                         agent.get_hidden_state(b_obs[mb_inds]),
-                        b_actions[mb_inds],
+                        F.one_hot(
+                            b_actions[mb_inds].long(), envs.single_action_space.n
+                        ),
                         agent.get_hidden_state(
                             b_obs[np.clip(mb_inds + 1, 0, args.num_steps - 1)]
                         ),
