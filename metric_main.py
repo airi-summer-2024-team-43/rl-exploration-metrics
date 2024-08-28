@@ -69,7 +69,9 @@ class MetricsUsage:
                 )
 
         if self.args.use_model_disagreement_metric:
-            self.ensemble = Ensemble(obs_space, action_space, args.ensemble_size)
+            self.ensemble = Ensemble(obs_space, action_space, args.ensemble_size).to(
+                self.device
+            )
 
     def update_intrinsic_reward(self, obs, rewards):
         args = self.args
@@ -88,7 +90,7 @@ class MetricsUsage:
     def update_disagreement(self, obs, actions):
         if self.args.use_model_disagreement_metric:
             disagreement = self.ensemble.get_disagreement(obs, actions)
-            self.episode_disagreements.append(disagreement)
+            self.episode_disagreements.append(disagreement.item())
 
     def update_learnable_metric(self, obs):
         if self.args.use_rnd_metric:
@@ -135,7 +137,7 @@ class MetricsUsage:
             )
         if self.args.plot_visitation_map:
             import matplotlib.pyplot as plt
+
             visitations = self.state_counter.get_visitation_maps(self.state_counts)
-            self.writer.add_figure(
-                'vis/visitations', plt.imshow(np.log(visitations + 1), origin='lower')
-            )
+            plt.imshow(np.log(visitations + 1), origin="lower")
+            self.writer.add_figure("vis/visitations", plt.gcf())
