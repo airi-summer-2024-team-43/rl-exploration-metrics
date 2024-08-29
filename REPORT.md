@@ -17,7 +17,7 @@
 ![rnd](public/rnd.png)
  [https://arxiv.org/pdf/1810.12894](https://arxiv.org/pdf/1810.12894)
 
-**Model Disagreement** - 
+**Model Disagreement** - это когда агент получает внутреннюю мотивацию **(intrinsic reward)** за ход, приближающий его ближе к вознаграждению 
 ![model-disagreement](public/model-disagreement.png)
 [https://pathak22.github.io/exploration-by-disagreement/resources/icml19.pdf](https://pathak22.github.io/exploration-by-disagreement/resources/icml19.pdf)
 
@@ -46,7 +46,7 @@
 
 ![montezuma-revenge](public/montezuma-revenge.png)
 
-По итогам проведенной работы, можно сказать о том, что описанные здесь подходы при выборе разных сред показывают **... (дополнить)**.
+По итогам проведенной работы, можно сказать о том, что описанные здесь подходы при выборе разных сред показывают что подходы, основанные на оценке новизны, иногда обеспечивают достойную оценку исследования агента RL, но они недостаточно подтверждены, чтобы обобщить этот ответ на все среды и алгоритмы..
 
 
 
