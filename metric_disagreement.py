@@ -47,7 +47,7 @@ class Ensemble(nn.Module):
     @torch.no_grad()
     def get_disagreement(self, obs, action):
         preds = self.forward(obs, action)
-        return preds.var(dim=-1).mean()
+        return preds.var(dim=0).mean(dim=-1)
 
     def update(self, loss):
         self.optimizer.zero_grad()
