@@ -51,19 +51,22 @@ class Args:
     """whether to add state counting metric"""
     state_counting_offset: int = 40000
     """number of steps for state counting to wait before starting"""
+    use_model_disagreement_intrinsic_reward: bool = False
+    """whether to add model disagreement intrinsic reward"""
     use_model_disagreement_metric: bool = False
     """whether to add model disagreement metric"""
     plot_visitation_map: bool = False
     """whether to log visitation heatmap"""
     max_episode_steps: int = 600
     """max episode steps of the environment"""
+    save_history_of_obs: bool = False
 
     # Algorithm specific arguments
     env_id: str = "PointMaze_UMaze-v3"
     """the id of the environment"""
     env_map: str = None
     """custom map name"""
-    total_timesteps: int = 1000000
+    total_timesteps: int = 4000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -219,7 +222,11 @@ if __name__ == "__main__":
     metric = MetricsUsage()
     New_Args = metric.update_arg_class(Args)
     args = tyro.cli(New_Args)
-
+    args.use_rnd_metric = args.use_rnd_metric or args.use_rnd_intrinsic_reward
+    args.use_model_disagreement_metric = (
+        args.use_model_disagreement_metric
+        or args.use_model_disagreement_intrinsic_reward
+    )
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
@@ -304,6 +311,9 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
+    if args.save_history_of_obs:
+        history_obs = np.zeros((1, 2))
+
     for iteration in range(1, args.num_iterations + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -327,6 +337,8 @@ if __name__ == "__main__":
             next_obs, reward, terminations, truncations, infos = envs.step(
                 action.cpu().numpy()
             )
+            if args.save_history_of_obs:
+                history_obs = np.concatenate((history_obs, next_obs[:, :2]), axis=0)
             reward *= 0
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
@@ -351,7 +363,7 @@ if __name__ == "__main__":
                             "charts/episodic_length", info["episode"]["l"], global_step
                         )
 
-        rewards = metric.update_intrinsic_reward(obs, rewards)
+        rewards = metric.update_intrinsic_reward(obs, actions, rewards)
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -468,6 +480,9 @@ if __name__ == "__main__":
         )
         metric.end_episode_update()
         metric.log_metrics(global_step)
+        if args.save_history_of_obs:
+            with open("history/dataset.npy", "wb") as f:
+                np.save(f, history_obs)
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"

@@ -12,7 +12,7 @@ def args_for_state_counting(algo_args):
 
 
 class StateCounter:
-    def __init__(self, x_size=10, y_size=7, scale=2):
+    def __init__(self, x_size=10, y_size=7, scale=5):
         self.x_size = x_size
         self.y_size = y_size
         self.scale = scale
@@ -49,5 +49,7 @@ class StateCounter:
     def to_2d_visitation_map(self, visitation, visitation_set):
         for x in visitation_set:
             i, j = divmod(x, self.shape[1])
+            i = np.clip(i, 0, self.shape[0] - 1)
+            j = np.clip(j, 0, self.shape[1] - 1)
             visitation[i, j] += 1
         # visitation[35, 65] = 1

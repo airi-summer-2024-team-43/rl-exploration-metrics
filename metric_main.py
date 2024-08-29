@@ -19,10 +19,10 @@ class MetricsUsage:
         return args_class
 
     def _init_metrics_running_info(self):
-        self.running_int_rewards = []
-        self.running_state_counts = []
+        self.running_int_rewards = [0]
+        self.running_state_counts = [0]
         self.episode_disagreements = []
-        self.running_disagreements = []
+        self.running_disagreements = [0]
         self.state_counts = [set() for _ in range(self.args.num_envs)]
         self.int_rewards = torch.zeros((self.args.num_steps, self.args.num_envs)).to(
             self.device
@@ -62,6 +62,7 @@ class MetricsUsage:
                 self.state_counter = StateCounter()
             else:
                 from maze_maps import get_map_size
+
                 map_size = get_map_size(map_name)
                 self.state_counter = StateCounter(
                     x_size=map_size[1], y_size=map_size[0]
@@ -72,7 +73,7 @@ class MetricsUsage:
                 self.device
             )
 
-    def update_intrinsic_reward(self, obs, rewards):
+    def update_intrinsic_reward(self, obs, actions, rewards):
         args = self.args
         if args.use_rnd_metric:
             intrinsic_rewards = self.rnd_model.get_intrinsic_reward(
@@ -84,12 +85,15 @@ class MetricsUsage:
                     rewards[-args.num_steps :] * args.ext_coef
                     + intrinsic_rewards * args.int_coef
                 )
+        if args.use_model_disagreement_intrinsic_reward:
+            int_rewards = self.ensemble.get_disagreement(obs, actions)
+            rewards = rewards * args.ext_coef + int_rewards * args.int_coef
         return rewards
 
     def update_disagreement(self, obs, actions):
         if self.args.use_model_disagreement_metric:
             disagreement = self.ensemble.get_disagreement(obs, actions)
-            self.episode_disagreements.append(disagreement.item())
+            self.episode_disagreements.append(disagreement.mean().item())
 
     def update_learnable_metric(self, obs):
         if self.args.use_rnd_metric:
@@ -101,8 +105,11 @@ class MetricsUsage:
             disagreement_loss = self.ensemble.get_ensemble_loss(obs, action, next_obs)
             self.ensemble.update(disagreement_loss)
 
-    def update_with_state(self, next_obs):
-        if self.args.use_state_counting_metric:
+    def update_with_state(self, next_obs, global_step):
+        if (
+            self.args.use_state_counting_metric
+            and global_step >= self.args.state_counting_offset
+        ):
             state_count_rewards, self.state_counts = (
                 self.state_counter.update_visited_states(next_obs, self.state_counts)
             )
@@ -126,7 +133,10 @@ class MetricsUsage:
             self.writer.add_scalar(
                 "metric/novelty_rnd", self.running_int_rewards[-1], step
             )
-        if self.args.use_state_counting_metric:
+        if (
+            self.args.use_state_counting_metric
+            and step >= self.args.state_counting_offset
+        ):
             self.writer.add_scalar(
                 "metric/state_counts", self.running_state_counts[-1], step
             )

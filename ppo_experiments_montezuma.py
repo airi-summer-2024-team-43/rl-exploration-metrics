@@ -38,7 +38,7 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL-exploration-montezuma"
+    wandb_project_name: str = "cleanRL-exploration-montezuma-final"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -62,7 +62,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "ALE/MontezumaRevenge-v5"
     """the id of the environment"""
-    total_timesteps: int = 10000000
+    total_timesteps: int = 4000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -72,7 +72,7 @@ class Args:
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.9
+    gamma: float = 0.995
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
@@ -296,6 +296,7 @@ if __name__ == "__main__":
             )
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
+            int_rewards[step] = 0
             next_obs, next_done = (
                 torch.Tensor(next_obs).to(device),
                 torch.Tensor(next_done).to(device),
@@ -320,7 +321,7 @@ if __name__ == "__main__":
                     episodic_disagreements[i][1] += 1
                 if args.use_model_disagreement_intrinsic_reward:
                     int_rewards[step] += disagreements[step]
-
+    
             if "final_info" in infos:
                 for i, info in enumerate(infos["final_info"]):
                     if info and "episode" in info:
@@ -348,6 +349,7 @@ if __name__ == "__main__":
                                 global_step,
                             )
                             episodic_disagreements[i] = [0, 1]
+        
         # bootstrap value if not done
         with torch.no_grad():
             next_value, next_int_value = agent.get_value(next_obs)
