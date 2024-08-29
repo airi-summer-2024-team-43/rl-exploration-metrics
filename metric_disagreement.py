@@ -8,7 +8,7 @@ from dataclasses import dataclass
 def args_for_disagreement(algo_args):
     @dataclass
     class ArgsDisagreement(algo_args):
-        ensemble_size: int = 30
+        ensemble_size: int = 10
         """Ensemble size"""
 
     return ArgsDisagreement

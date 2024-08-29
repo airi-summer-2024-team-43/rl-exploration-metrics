@@ -12,7 +12,7 @@ def args_for_state_counting(algo_args):
 
 
 class StateCounter:
-    def __init__(self, x_size=10, y_size=7, scale=10):
+    def __init__(self, x_size=10, y_size=7, scale=2):
         self.x_size = x_size
         self.y_size = y_size
         self.scale = scale
