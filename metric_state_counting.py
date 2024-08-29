@@ -34,17 +34,20 @@ class StateCounter:
             visited_states[i].add(self.get_cell(obs[i]))
 
         return rewards, visited_states
-    
+
     def get_metric_value(self, visited_states):
         return np.mean([len(x) for x in visited_states]) / self.num_states
-    
+
     def get_visitation_maps(self, visited_states):
-        visitation = np.zeros(self.shape)  # В эту переменную инициализируем пустой массив размером с карту
+        visitation = np.zeros(
+            self.shape
+        )  # В эту переменную инициализируем пустой массив размером с карту
         for vis_set in visited_states:
             self.to_2d_visitation_map(visitation, vis_set)
         return visitation
-    
+
     def to_2d_visitation_map(self, visitation, visitation_set):
         for x in visitation_set:
             i, j = divmod(x, self.shape[1])
             visitation[i, j] += 1
+        # visitation[35, 65] = 1
