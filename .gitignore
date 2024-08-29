@@ -2,3 +2,6 @@ runs
 __pycache__
 wandb
 videos
+dataset.npy
+history
+.ipynb_checkpoints
