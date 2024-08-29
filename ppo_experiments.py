@@ -27,7 +27,7 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL-exploration"
+    wandb_project_name: str = "cleanRL-exploration-pointmaze"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -49,15 +49,17 @@ class Args:
     """whether to add RND metric. set True if use_rnd_intrinsic_reward is True"""
     use_state_counting_metric: bool = False
     """whether to add state counting metric"""
+    state_counting_offset: int = 40000
+    """number of steps for state counting to wait before starting"""
     use_model_disagreement_metric: bool = False
     """whether to add model disagreement metric"""
-
     plot_visitation_map: bool = False
     """whether to log visitation heatmap"""
-
+    max_episode_steps: int = 600
+    """max episode steps of the environment"""
 
     # Algorithm specific arguments
-    env_id: str = "PointMaze_Large_Diverse_G-v3"
+    env_id: str = "PointMaze_UMaze-v3"
     """the id of the environment"""
     env_map: str = None
     """custom map name"""
@@ -65,9 +67,9 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 1
+    num_envs: int = 8
     """the number of parallel game environments"""
-    num_steps: int = 2048
+    num_steps: int = 600
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -103,16 +105,36 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
 
-def make_env(env_id, idx, capture_video, run_name, gamma, **kwargs):
+class FlattenObservation(gym.ObservationWrapper, gym.utils.RecordConstructorArgs):
+    def __init__(self, env: gym.Env):
+        gym.utils.RecordConstructorArgs.__init__(self)
+        gym.ObservationWrapper.__init__(self, env)
+
+        self.observation_space = gym.spaces.flatten_space(env.observation_space)
+
+    def observation(self, observation):
+        return np.concatenate(
+            [
+                observation["achieved_goal"],
+                observation["observation"],
+                observation["desired_goal"],
+            ]
+        )
+
+
+def make_env(env_id, idx, capture_video, run_name, gamma, max_episode_steps, **kwargs):
     def thunk():
         if capture_video and idx == 0:
-            env = gym.make(env_id, render_mode="rgb_array", **kwargs)
+            env = gym.make(
+                env_id,
+                render_mode="rgb_array",
+                max_episode_steps=max_episode_steps,
+                **kwargs,
+            )
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
-            env = gym.make(env_id, **kwargs)
-        env = gym.wrappers.FlattenObservation(
-            env
-        )  # deal with dm_control's Dict observation space
+            env = gym.make(env_id, max_episode_steps=max_episode_steps, **kwargs)
+        env = FlattenObservation(env)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
         env = gym.wrappers.NormalizeObservation(env)
@@ -206,11 +228,13 @@ if __name__ == "__main__":
     if args.track:
         import wandb
 
+        config = vars(args).copy()
+        del config["seed"]
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
             sync_tensorboard=True,
-            config=vars(args),
+            config=config,
             name=run_name,
             monitor_gym=True,
             save_code=False,
@@ -236,7 +260,13 @@ if __name__ == "__main__":
     env_factory = get_env_factory(args)
     envs = gym.vector.SyncVectorEnv(
         [
-            env_factory(i, args.capture_video, run_name, args.gamma)
+            env_factory(
+                i,
+                args.capture_video,
+                run_name,
+                args.gamma,
+                max_episode_steps=args.max_episode_steps,
+            )
             for i in range(args.num_envs)
         ]
     )
@@ -248,7 +278,11 @@ if __name__ == "__main__":
     parameters = list(agent.parameters())
     optimizer = optim.Adam(parameters, lr=args.learning_rate, eps=1e-5)
     metric.init_metrics_info(
-        args, envs.single_observation_space.shape[0], envs.single_action_space.shape[0], writer, device
+        args,
+        envs.single_observation_space.shape[0],
+        envs.single_action_space.shape[0],
+        writer,
+        device,
     )
 
     # ALGO Logic: Storage setup
@@ -293,6 +327,7 @@ if __name__ == "__main__":
             next_obs, reward, terminations, truncations, infos = envs.step(
                 action.cpu().numpy()
             )
+            reward *= 0
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = (
@@ -300,7 +335,7 @@ if __name__ == "__main__":
                 torch.Tensor(next_done).to(device),
             )
 
-            metric.update_with_state(next_obs)
+            metric.update_with_state(next_obs, global_step)
             metric.update_disagreement(next_obs, action)
 
             if "final_info" in infos:
@@ -315,9 +350,6 @@ if __name__ == "__main__":
                         writer.add_scalar(
                             "charts/episodic_length", info["episode"]["l"], global_step
                         )
-
-                        metric.end_episode_update()
-                        metric.log_metrics(global_step)
 
         rewards = metric.update_intrinsic_reward(obs, rewards)
 
@@ -403,8 +435,7 @@ if __name__ == "__main__":
                 entropy_loss = entropy.mean()
                 loss = pg_loss + v_loss * args.vf_coef
 
-                if args.use_entropy_loss:
-                    loss += -entropy_loss * args.ent_coef
+                loss += -entropy_loss * args.ent_coef
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -435,6 +466,8 @@ if __name__ == "__main__":
         writer.add_scalar(
             "charts/SPS", int(global_step / (time.time() - start_time)), global_step
         )
+        metric.end_episode_update()
+        metric.log_metrics(global_step)
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
