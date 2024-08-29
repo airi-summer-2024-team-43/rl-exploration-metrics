@@ -38,22 +38,26 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
+    wandb_project_name: str = "cleanRL-exploration-montezuma"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
+    video_period: int = 20
+    """the period (number of episodes) to save the video"""
 
     # Experiment arguments
     use_entropy_loss: bool = False
     """whether to add entropy loss"""
     use_rnd_intrinsic_reward: bool = False
     """whether to add RND intrinsic reward"""
+    use_model_disagreement_intrinsic_reward: bool = False
+    """whether to add model disagreement intrinsic reward"""
     use_rnd_metric: bool = False
     """whether to add RND metric. set True if use_rnd_intrinsic_reward is True"""
     use_model_disagreement_metric: bool = False
-    """whether to add model disagreement metric"""
+    """whether to add model disagreement metric. set True if use_model_disagreement_intrinsic_reward is True"""
 
     # Algorithm specific arguments
     env_id: str = "ALE/MontezumaRevenge-v5"
@@ -64,11 +68,11 @@ class Args:
     """the learning rate of the optimizer"""
     num_envs: int = 8
     """the number of parallel game environments"""
-    num_steps: int = 128
+    num_steps: int = 256
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.99
+    gamma: float = 0.9
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
@@ -100,11 +104,15 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
 
-def make_env(env_id, idx, capture_video, run_name):
+def make_env(env_id, idx, capture_video, run_name, video_period):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            env = gym.wrappers.RecordVideo(
+                env,
+                f"videos/{run_name}",
+                episode_trigger=lambda x: x % video_period == 0,
+            )
         else:
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -175,18 +183,23 @@ if __name__ == "__main__":
     args_class = args_for_rnd(args_class)
     args = tyro.cli(args_class)
     args.use_rnd_metric = args.use_rnd_metric or args.use_rnd_intrinsic_reward
+    args.use_model_disagreement_metric = (
+        args.use_model_disagreement_metric
+        or args.use_model_disagreement_intrinsic_reward
+    )
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
-
+        config = vars(args).copy()
+        del config["seed"]
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
             sync_tensorboard=True,
-            config=vars(args),
+            config=config,
             name=run_name,
             monitor_gym=True,
             save_code=True,
@@ -211,7 +224,7 @@ if __name__ == "__main__":
     # env setup
     envs = gym.vector.SyncVectorEnv(
         [
-            make_env(args.env_id, i, args.capture_video, run_name)
+            make_env(args.env_id, i, args.capture_video, run_name, args.video_period)
             for i in range(args.num_envs)
         ],
     )
@@ -243,7 +256,10 @@ if __name__ == "__main__":
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
     int_values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    rnds = torch.zeros((args.num_steps, args.num_envs)).to(device)
     disagreements = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    episodic_rnds = [[0, 1] for _ in range(args.num_envs)]
+    episodic_disagreements = [[0, 1] for _ in range(args.num_envs)]
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
@@ -253,7 +269,6 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
 
     for iteration in range(1, args.num_iterations + 1):
-        episode_starts = [0] * args.num_envs
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / args.num_iterations
@@ -286,12 +301,26 @@ if __name__ == "__main__":
                 torch.Tensor(next_done).to(device),
             )
             if args.use_rnd_metric:
-                int_rewards[step] = rnd_model.get_intrinsic_reward(next_obs).view(-1)
+                rnds[step] = rnd_model.get_intrinsic_reward(next_obs).view(-1)
+                for i in range(args.num_envs):
+                    episodic_rnds[i][0] += rnds[step, i].item()
+                    episodic_rnds[i][1] += 1
+                if args.use_rnd_intrinsic_reward:
+                    int_rewards[step] += rnds[step]
+
             if args.use_model_disagreement_metric:
                 disagreements[step] = ensemble.get_disagreement(
-                    agent.get_hidden_state(next_obs),
-                    F.one_hot(action.long(), envs.single_action_space.n),
+                    agent.get_hidden_state(next_obs).detach(),
+                    F.one_hot(
+                        action.detach().long(), envs.single_action_space.n
+                    ).detach(),
                 )
+                for i in range(args.num_envs):
+                    episodic_disagreements[i][0] += disagreements[step, i].item()
+                    episodic_disagreements[i][1] += 1
+                if args.use_model_disagreement_intrinsic_reward:
+                    int_rewards[step] += disagreements[step]
+
             if "final_info" in infos:
                 for i, info in enumerate(infos["final_info"]):
                     if info and "episode" in info:
@@ -304,23 +333,21 @@ if __name__ == "__main__":
                         writer.add_scalar(
                             "charts/episodic_length", info["episode"]["l"], global_step
                         )
-                        writer.add_scalar(
-                            "charts/rnd_mean",
-                            int_rewards[episode_starts[i] : step, i].mean(),
-                            global_step,
-                        )
-                        writer.add_scalar(
-                            "charts/rnd_std",
-                            int_rewards[episode_starts[i] : step, i].std(),
-                            global_step,
-                        )
-                        writer.add_scalar(
-                            "charts/model_disagreement_mean",
-                            disagreements[episode_starts[i] : step, i].mean(),
-                            global_step,
-                        )
-                        episode_starts[i] = step
-
+                        if args.use_rnd_metric:
+                            writer.add_scalar(
+                                "metrics/episodic_rnd_mean",
+                                episodic_rnds[i][0] / episodic_rnds[i][1],
+                                global_step,
+                            )
+                            episodic_rnds[i] = [0, 1]
+                        if args.use_model_disagreement_metric:
+                            writer.add_scalar(
+                                "metrics/episodic_disagreement_mean",
+                                episodic_disagreements[i][0]
+                                / episodic_disagreements[i][1],
+                                global_step,
+                            )
+                            episodic_disagreements[i] = [0, 1]
         # bootstrap value if not done
         with torch.no_grad():
             next_value, next_int_value = agent.get_value(next_obs)
@@ -401,7 +428,7 @@ if __name__ == "__main__":
                     mb_int_advantages = (
                         mb_int_advantages - mb_int_advantages.mean()
                     ) / (mb_int_advantages.std() + 1e-8)
-                if args.use_rnd_intrinsic_reward:
+                if args.use_rnd_intrinsic_reward or args.use_model_disagreement_intrinsic_reward:
                     mb_advantages = (
                         mb_advantages * args.ext_coef
                         + mb_int_advantages * args.int_coef
@@ -443,13 +470,14 @@ if __name__ == "__main__":
 
                 if args.use_model_disagreement_metric:
                     disagreement_loss = ensemble.get_ensemble_loss(
-                        agent.get_hidden_state(b_obs[mb_inds]),
+                        agent.get_hidden_state(b_obs[mb_inds]).detach(),
                         F.one_hot(
-                            b_actions[mb_inds].long(), envs.single_action_space.n
-                        ),
+                            b_actions[mb_inds].long().detach(),
+                            envs.single_action_space.n,
+                        ).detach(),
                         agent.get_hidden_state(
                             b_obs[np.clip(mb_inds + 1, 0, args.num_steps - 1)]
-                        ),
+                        ).detach(),
                     )
                     ensemble.update(disagreement_loss)
 
@@ -481,6 +509,29 @@ if __name__ == "__main__":
         writer.add_scalar(
             "charts/SPS", int(global_step / (time.time() - start_time)), global_step
         )
+        writer.add_scalar("charts/int_reward_mean", int_rewards.mean(), global_step)
+        if args.use_rnd_metric:
+            writer.add_scalar(
+                "metrics/rnd_mean",
+                rnds.mean(),
+                global_step,
+            )
+            writer.add_scalar(
+                "metrics/rnd_std",
+                rnds.std(0).mean(),
+                global_step,
+            )
+        if args.use_model_disagreement_metric:
+            writer.add_scalar(
+                "metrics/model_disagreement_mean",
+                disagreements.mean(),
+                global_step,
+            )
+            writer.add_scalar(
+                "metrics/model_disagreement_std",
+                disagreements.std(0).mean(),
+                global_step,
+            )
 
     envs.close()
     writer.close()
