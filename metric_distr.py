@@ -15,56 +15,36 @@ class DistrMetric:
         k_nbrs.fit(samples)
         return k_nbrs
 
-    def k_nearest_objects(self, x_i, k_nbrs):
-        x_i = x_i.reshape(1, -1)
-        distances, indices = k_nbrs.kneighbors(x_i)
-        return indices.flatten(), distances.flatten()
-
-    def function_term(self, MN, N_i, M_i):
-        ans = MN * N_i / (M_i + 1)
-        if N_i > 0:
-            ans = -np.log(ans)
-        else:
-            ans = 0
+    def function_term(self, MN, Ns, Ms):
+        res = np.zeros_like(Ns, dtype=float)
+        mask = Ns > 0
+        res[mask] = -np.log(MN * Ns[mask] / (Ms[mask] + 1.0))
         # ans = np.max([ans, np.log(0.0001)])  # TODO - np.log(Cl / Cu)
-        return ans
+        return res
 
-    def D(self, sample_X, sample_Y, sample_Z, k):
-        M = sample_Y.shape[0]
-        N = sample_X.shape[0]
-        MN = M / N
-
-        k_nbrs = self.k_nearest_neighbors(sample_Z, k)
-        sX, sY = self._to_set(sample_X), self._to_set(sample_Y)
-
-        sum_D = 0
-        for y_i in tqdm.tqdm(sample_Y):
-            neighbors_ind, _ = self.k_nearest_objects(y_i, k_nbrs)
-            R_k = sample_Z[neighbors_ind]
-
-            sRk = self._to_set(R_k)
-            N_i = self.n_intersects(sX, sRk)
-            M_i = self.n_intersects(sY, sRk)
-            sum_D += self.function_term(MN, N_i, M_i)
-
-        sum_D = sum_D / M
-        sum_D = np.max([sum_D, 0])  # TODO
-        print(sum_D)
-        return sum_D
+    def get_KL(self, in_Ns, M, N, k):
+        Ns = np.count_nonzero(in_Ns, axis=-1)
+        Ms = k - Ns
+        Ds = self.function_term(M / N, Ns, Ms)
+        D = np.max([np.mean(Ds), 0.0])
+        print(D)
+        return D
 
     def metric(self, sample_X, sample_Y, k):
         sample_Z = np.concatenate((sample_X, sample_Y), axis=0)
-        ans_metric = -self.D(sample_X, sample_Y, sample_Z, k)
-        ans_metric -= self.D(sample_Y, sample_X, sample_Z, k)
-        return ans_metric
+        M, N = sample_Y.shape[0], sample_X.shape[0]
+        MN = M / N
 
-    @staticmethod
-    def n_intersects(a, b):
-        return len(a & b)
+        # for both X & Y
+        k_nbrs = self.k_nearest_neighbors(sample_Z, k)
+        neighbors_inds = k_nbrs.kneighbors(sample_Z, return_distance=False)
 
-    @staticmethod
-    def _to_set(a):
-        return {tuple(x) for x in a}
+        # k neighbors (sample_Y) in X: last M indices < N
+        D_YX = self.get_KL(neighbors_inds[-M:] < N, M, N, k)
+        # k neighbors (sample_X) in Y: first N indices >= N
+        D_XY = self.get_KL(neighbors_inds[:N] >= N, N, M, k)
+        D = -D_YX - D_XY
+        return D
 
 
 def download_sample(path):
@@ -82,31 +62,12 @@ def data_use(
     env_samples=None,
 ):
     env_sample = env_samples[:N, :]
-    u_sample = np.random.uniform(low=-10, high=10, size=(N // 4, 2))
+    u_sample = np.random.uniform(low=[-11.5, -11.5], high=[11.5, 11.5], size=(N, 2))
     print(f"env = {env_sample.shape}, u = {u_sample.shape}")
     metric = DistrMetric()
     m = metric.metric(env_sample, u_sample, k)
     print(f"metric {name} = {m}")
     return m
-
-
-def main_random():
-    metric = DistrMetric()
-
-    np.random.seed(42)
-    samples_X = np.clip(np.random.normal(3, 2.5, size=(10, 3)) + 0.5, a_max=1, a_min=0)
-    samples_Y = np.random.rand(50, 3)
-    k = 3
-    # x_i = np.array([0.5, 0.5, 0.5])
-
-    # k_nbrs = metric.k_nearest_neighbors(samples_X, k)
-    print(metric.metric(samples_Y, samples_X, k))
-
-    # neighbors, distances = metric.k_nearest_objects(x_i, k_nbrs)
-
-    # print("Indices of k-nearest neighbors:", neighbors)
-    # print("k-nearest neighbors:", samples_X[neighbors])
-    # print("Distances to k-nearest neighbors:", distances)
 
 
 def graph(data, global_steps):
@@ -127,7 +88,7 @@ def graph(data, global_steps):
 
     # Show the plot
     plt.tight_layout()
-    plt.savefig("my_plot.png")
+    plt.savefig("my_plot_3.png")
     plt.show()
 
 
@@ -138,7 +99,7 @@ def analize(load=False):
         "MD": "history/dataset_PointMaze_UMaze-v3__INT_REW_MD_LARGE__10__1724965995.npy.gz",
     }
 
-    k = 25
+    k = 10
 
     if load:
         with open(f"m_distr_{k}.json", "r") as openfile:
@@ -152,7 +113,7 @@ def analize(load=False):
 
     env_sample = {key: download_sample(elem) for key, elem in paths.items()}
 
-    all_N = [100_000, 200_000, 500_000, 750_000, 1_000_000, 1_250_000]
+    all_N = [10_000, 50_000, 100_000, 200_000, 500_000, 750_000, 1_000_000, 1_250_000]
     for N in all_N:
         for name in paths:
             m = data_use(name, paths[name], N, k, env_sample[name])

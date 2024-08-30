@@ -1,4 +1,5 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_continuous_actionpy
+import gzip
 import os
 import random
 import time
@@ -59,7 +60,7 @@ class Args:
     """whether to log visitation heatmap"""
     max_episode_steps: int = 600
     """max episode steps of the environment"""
-    save_history_of_obs: bool = False
+    save_history_of_obs: bool = True
 
     # Algorithm specific arguments
     env_id: str = "PointMaze_UMaze-v3"
@@ -480,8 +481,9 @@ if __name__ == "__main__":
         )
         metric.end_episode_update()
         metric.log_metrics(global_step)
-        if args.save_history_of_obs:
-            with open("history/dataset.npy", "wb") as f:
+        if args.save_history_of_obs and (iteration % 100):
+            with gzip.GzipFile(f"history/dataset_{run_name}.npy.gz", "w") as f:
+                # with open(f"history/dataset_{run_name}.npz", "wb") as f:
                 np.save(f, history_obs)
 
     if args.save_model:
