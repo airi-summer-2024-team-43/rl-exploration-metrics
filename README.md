@@ -1,7 +1,10 @@
 # Exploration Metrics in RL
 This repository presents experiments on measuring exploration in Reinforcement Learning conducted by **Team 43** during **AIRI Summer School 2024** 
 
-# How to use
+## Project Results
+For results, see [our report](REPORT.md)
+
+## How to use
 - Install [cleanrl](https://docs.cleanrl.dev) along with its dependencies 
 - To launch experiment on [Robotics](https://robotics.farama.org) environment (`PointMaze`, `AntMaze`), run: 
 ```python
@@ -14,10 +17,7 @@ python ppo_experiments_atari.py
 - Metrics for `ppo_experiments.py` are defined in `metric_main.py`. You can track them by passing corresponding arguments to the script
 - Available metrics for atari are defined in `ppo_experiments_atari.py`. You can track them by passing corresponding arguments to the script
 
-# Results
-For results, see [our report](REPORT.md)
-
-# Reproducing results
+## Reproducing results
 Let's define Exploration Boost as one of the following algorithm modes:
 - Entriopy: Standard PPO Entropy term is added to policy loss. Other boosts do not exclude entropy from loss, we just don't mention it
 - RND: Adding intrinsic reward from RND output. More details [here](https://arxiv.org/pdf/1810.12894)
@@ -33,8 +33,9 @@ We ran experiments with the following settings:
     - Running with every Exploration boost (Entropy, RND, Model Disagreement)
     - Tracking Episoding Length, RND, Model Disagreement metrics on every run
 
-## Scripts
-Below we present shell scripts we used for experiments. 
+### Run Scripts
+Below we present shell scripts we used for our experiments:
+
 ```bash
 # POINT_MAZE
 # RND boost, small maze
