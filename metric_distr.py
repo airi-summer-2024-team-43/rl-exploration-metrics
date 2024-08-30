@@ -3,6 +3,7 @@ from sklearn.neighbors import NearestNeighbors
 import gzip
 import tqdm
 import json
+import matplotlib.pyplot as plt
 
 
 class DistrMetric:
@@ -108,11 +109,33 @@ def main_random():
     # print("Distances to k-nearest neighbors:", distances)
 
 
+def graph(data, global_steps):
+    # Prepare the plot
+    plt.figure(figsize=(10, 6))
+
+    # Plot each line
+    for label, values in data.items():
+        plt.plot(global_steps[: len(values)], values, marker="o", label=label)
+
+    # Adding titles and labels
+    plt.title("Metric with distr.")
+    plt.xlabel("global_steps")
+    plt.ylabel("Metric")
+    plt.xticks(range(len(values)))  # Set x-ticks to match indices
+    plt.legend()  # Show legend
+    plt.grid(True, which="both", linestyle="-")  # Add grid for better readability
+
+    # Show the plot
+    plt.tight_layout()
+    plt.savefig("my_plot.png")
+    plt.show()
+
+
 def analize(load=False):
     paths = {
         "none": "history/dataset_PointMaze_UMaze-v3__INT_REW_NONE_LARGE__10__1724965999.npy.gz",
-        "rnd": "history/dataset_PointMaze_UMaze-v3__INT_REW_RND_LARGE__10__1724965992.npy.gz",
-        "md": "history/dataset_PointMaze_UMaze-v3__INT_REW_MD_LARGE__10__1724965995.npy.gz",
+        "RND": "history/dataset_PointMaze_UMaze-v3__INT_REW_RND_LARGE__10__1724965992.npy.gz",
+        "MD": "history/dataset_PointMaze_UMaze-v3__INT_REW_MD_LARGE__10__1724965995.npy.gz",
     }
 
     k = 25
@@ -123,13 +146,13 @@ def analize(load=False):
     else:
         res = {
             "none": [],
-            "rnd": [],
-            "md": [],
+            "RND": [],
+            "MD": [],
         }
 
     env_sample = {key: download_sample(elem) for key, elem in paths.items()}
 
-    all_N = [1000, 5000, 10000]
+    all_N = [100_000, 200_000, 500_000, 750_000, 1_000_000, 1_250_000]
     for N in all_N:
         for name in paths:
             m = data_use(name, paths[name], N, k, env_sample[name])
@@ -138,6 +161,8 @@ def analize(load=False):
 
         with open(f"m_distr_{k}.json", "w") as outfile:
             json.dump(res, outfile)
+
+        graph(res, all_N)
 
 
 # Example usage
