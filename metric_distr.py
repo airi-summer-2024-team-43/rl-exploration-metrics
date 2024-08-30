@@ -18,12 +18,6 @@ class DistrMetric:
         distances, indices = k_nbrs.kneighbors(x_i)
         return indices.flatten(), distances.flatten()
 
-    def intersection(self, set_A_np, set_B_np):
-        set_A = {tuple(row) for row in set_A_np}
-        set_B = {tuple(row) for row in set_B_np}
-        inter_A_B = set_A.intersection(set_B)
-        return inter_A_B
-
     def function_term(self, MN, N_i, M_i):
         ans = MN * N_i / (M_i + 1)
         if N_i > 0:
@@ -39,13 +33,16 @@ class DistrMetric:
         MN = M / N
 
         k_nbrs = self.k_nearest_neighbors(sample_Z, k)
+        sX, sY = self._to_set(sample_X), self._to_set(sample_Y)
 
         sum_D = 0
         for y_i in tqdm.tqdm(sample_Y):
             neighbors_ind, _ = self.k_nearest_objects(y_i, k_nbrs)
             R_k = sample_Z[neighbors_ind]
-            N_i = len(self.intersection(sample_X, R_k))
-            M_i = len(self.intersection(sample_Y, R_k))
+
+            sRk = self._to_set(R_k)
+            N_i = self.n_intersects(sX, sRk)
+            M_i = self.n_intersects(sX, sRk)
             sum_D += self.function_term(MN, N_i, M_i)
 
         sum_D = sum_D / M
@@ -53,23 +50,19 @@ class DistrMetric:
         print(sum_D)
         return sum_D
 
-    def cl_cu(self):
-        ...
-        # distances = <get distance from each point to each cluster: shape=(n_points, n_clusters>
-
-        # cluster_indices = np.argmin(distances, axis=-1)
-
-        # cluster_counts = np.zeros(n_clusters)
-
-        # np.add.at(cluster_counts, cluster_indices, 1)
-
-        # в cluster_counts число точек в каждом кластере
-
     def metric(self, sample_X, sample_Y, k):
         sample_Z = np.concatenate((sample_X, sample_Y), axis=0)
         ans_metric = -self.D(sample_X, sample_Y, sample_Z, k)
         ans_metric -= self.D(sample_Y, sample_X, sample_Z, k)
         return ans_metric
+
+    @staticmethod
+    def n_intersects(a, b):
+        return len(a & b)
+
+    @staticmethod
+    def _to_set(a):
+        return {tuple(x) for x in a}
 
 
 def download_sample(path):
@@ -79,15 +72,19 @@ def download_sample(path):
         return np.load(f)
 
 
-def data_use():
-    path = "history/dataset_PointMaze_UMaze-v3__ppo_experiments__1__1724965430.npy.gz"
-    env_sample = download_sample(path)[:20000, :]
-    u_sample = np.random.uniform(low=-10, high=10, size=(1000, 2))
+def data_use(
+    name="",
+    path="history/dataset_PointMaze_UMaze-v3__ppo_experiments__1__1724965430.npy.gz",
+    N=20_000,
+    k=10,
+):
+    env_sample = download_sample(path)[:N, :]
+    u_sample = np.random.uniform(low=-10, high=10, size=(N // 4, 2))
     print(f"env = {env_sample.shape}, u = {u_sample.shape}")
     metric = DistrMetric()
-    k = 10
     m = metric.metric(env_sample, u_sample, k)
-    print(m)
+    print(f"metric {name} = {m}")
+    return m
 
 
 def main_random():
@@ -109,7 +106,27 @@ def main_random():
     # print("Distances to k-nearest neighbors:", distances)
 
 
+def analize():
+    paths = {
+        "none": "history/dataset_PointMaze_UMaze-v3__INT_REW_NONE_LARGE__10__1724965999.npy.gz",
+        "rnd": "history/dataset_PointMaze_UMaze-v3__INT_REW_RND_LARGE__10__1724965992.npy.gz",
+        "md": "history/dataset_PointMaze_UMaze-v3__INT_REW_MD_LARGE__10__1724965995.npy.gz",
+    }
+
+    res = {
+        "none": [],
+        "rnd": [],
+        "md": [],
+    }
+
+    for k in paths:
+        m = data_use(k, paths[k], N=20_000, k=25)
+        res[k].append(m)
+        print()
+
+
 # Example usage
 if __name__ == "__main__":
     # main_random()
-    data_use()
+    # data_use()
+    analize()
