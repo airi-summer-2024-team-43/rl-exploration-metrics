@@ -22,6 +22,7 @@ Let's define Exploration Boost as one of the following algorithm modes:
 - Entriopy: Standard PPO Entropy term is added to policy loss. Other boosts do not exclude entropy from loss, we just don't mention it
 - RND: Adding intrinsic reward from RND output. More details [here](https://arxiv.org/pdf/1810.12894)
 - Model Disagreement: Adding intrinsic reward from Model Disagreement output. More details [here](https://pathak22.github.io/exploration-by-disagreement/resources/icml19.pdf)
+
 We ran experiments with the following settings:
 - For environments **PointMaze** and **AntMaze**:
     - Running every map size (small, medium large)
