@@ -21,6 +21,10 @@
 ![model-disagreement](public/model-disagreement.png)
 [https://pathak22.github.io/exploration-by-disagreement/resources/icml19.pdf](https://pathak22.github.io/exploration-by-disagreement/resources/icml19.pdf)
 
+**Offline Measures for Exploration** - это офлайн-оценка того, насколько близко распределение собранных состояний к равномерному распределению.
+![dist-metric](public/dist-metric.png)
+[https://arxiv.org/pdf/2010.15533](https://arxiv.org/pdf/2010.15533)
+
 Для создания пайплайна всех экспериментов, мы использовали код алгоритма **PPO**, дополнив в нём соответствующие параметры запуска сред с нужными нам флагами: выбор нужной среды (pointmaze, antmaze, montezuma revenge), выбор размера карт с параметрами small (7x10) | medium (15x15) | large (25x25). 
 
 Таким образом, были созданы кастомные карты сред-лабиринтов в виде матриц, с явно заданными целями **"g" (goal)** и **"r" (agent)**. 
@@ -45,6 +49,10 @@
 В конце, мы запустили тот же пайплайн со средой **MontezumaRevenge**, получив следующие результаты:
 
 ![montezuma-revenge](public/montezuma-revenge.png)
+
+В последние минуты мы запустили оффлайн-тестирование метрики на основе распределений на **PointMaze**. Результаты:
+
+![dist-point-maze](public/dist-point-maze.png)
 
 По итогам проведенной работы, можно сказать о том, что описанные здесь подходы при выборе разных сред показывают что подходы, основанные на оценке новизны, иногда обеспечивают достойную оценку исследования агента RL, но они недостаточно подтверждены, чтобы обобщить этот ответ на все среды и алгоритмы.
 
