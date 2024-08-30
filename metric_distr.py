@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 import gzip
 import tqdm
+import json
 
 
 class DistrMetric:
@@ -42,7 +43,7 @@ class DistrMetric:
 
             sRk = self._to_set(R_k)
             N_i = self.n_intersects(sX, sRk)
-            M_i = self.n_intersects(sX, sRk)
+            M_i = self.n_intersects(sY, sRk)
             sum_D += self.function_term(MN, N_i, M_i)
 
         sum_D = sum_D / M
@@ -77,8 +78,9 @@ def data_use(
     path="history/dataset_PointMaze_UMaze-v3__ppo_experiments__1__1724965430.npy.gz",
     N=20_000,
     k=10,
+    env_samples=None,
 ):
-    env_sample = download_sample(path)[:N, :]
+    env_sample = env_samples[:N, :]
     u_sample = np.random.uniform(low=-10, high=10, size=(N // 4, 2))
     print(f"env = {env_sample.shape}, u = {u_sample.shape}")
     metric = DistrMetric()
@@ -106,23 +108,36 @@ def main_random():
     # print("Distances to k-nearest neighbors:", distances)
 
 
-def analize():
+def analize(load=False):
     paths = {
         "none": "history/dataset_PointMaze_UMaze-v3__INT_REW_NONE_LARGE__10__1724965999.npy.gz",
         "rnd": "history/dataset_PointMaze_UMaze-v3__INT_REW_RND_LARGE__10__1724965992.npy.gz",
         "md": "history/dataset_PointMaze_UMaze-v3__INT_REW_MD_LARGE__10__1724965995.npy.gz",
     }
 
-    res = {
-        "none": [],
-        "rnd": [],
-        "md": [],
-    }
+    k = 25
 
-    for k in paths:
-        m = data_use(k, paths[k], N=20_000, k=25)
-        res[k].append(m)
-        print()
+    if load:
+        with open(f"m_distr_{k}.json", "r") as openfile:
+            res = json.load(openfile)
+    else:
+        res = {
+            "none": [],
+            "rnd": [],
+            "md": [],
+        }
+
+    env_sample = {key: download_sample(elem) for key, elem in paths.items()}
+
+    all_N = [1000, 5000, 10000]
+    for N in all_N:
+        for name in paths:
+            m = data_use(name, paths[name], N, k, env_sample[name])
+            res[name].append(m)
+            print()
+
+        with open(f"m_distr_{k}.json", "w") as outfile:
+            json.dump(res, outfile)
 
 
 # Example usage
